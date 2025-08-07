@@ -1,0 +1,299 @@
+================================================================================
+                    SOCIAL MEDIA PLATFORM - COMPLETE SITE MAPPING
+================================================================================
+
+🏗️ ARCHITECTURE OVERVIEW
+================================================================================
+Frontend: Next.js (React) - Port 3000
+Backend: FastAPI (Python) - Port 8001
+Database: SQLite (socialdb.db)
+Proxy: Nginx - Port 8080 (for Tor)
+Network: Tor Hidden Service (.onion)
+
+🌐 INFORMATION FLOW
+================================================================================
+User Request → Tor Network → .onion Address → Nginx Proxy → Frontend/Backend
+Frontend ←→ Backend API (JWT Authentication)
+Backend ←→ SQLite Database
+Backend ←→ External APIs (OpenAI, Stability AI, etc.)
+
+📱 FRONTEND PAGES & ROUTES
+================================================================================
+
+🔐 AUTHENTICATION PAGES
+├── /login                     - User login page
+├── /register                  - User registration page
+├── /auth/forgot-password      - Password reset page
+└── /simple-login              - Simplified login interface
+
+🏠 MAIN PLATFORM PAGES
+├── /                          - Landing page (redirects to feed if logged in)
+├── /feed                      - Main social media feed
+├── /profile                   - Current user's profile
+├── /profile/[id]              - Other user's profile page
+├── /messages                  - Direct messaging interface
+├── /notifications             - User notifications
+├── /comrades                  - Friends/followers management
+├── /settings                  - User settings and preferences
+├── /help                      - Help and support page
+├── /privacy                   - Privacy policy page
+└── /menu                      - Main navigation menu
+
+🤖 AI TOOLS SECTION
+├── /ai                        - Main AI tools panel
+├── /ai/text-generator         - Jarvis (Text Generation)
+├── /ai/image-generator        - Scarlet Witch (Image Creation)
+├── /ai/weather               - Storm (Weather Information)
+├── /ai/content-moderator     - Professor X (Content Moderation)
+├── /ai/speech-to-text        - Black Canary (Audio Transcription)
+├── /ai/sentiment-analyzer    - Mantis (Emotion Analysis)
+└── /ai/summarizer            - The Flash (Text Summarization)
+
+📊 ANALYTICS & ADMIN
+├── /analytics                 - Platform analytics (admin)
+└── /test                      - Development testing page
+
+🔧 API ENDPOINTS (Backend)
+================================================================================
+
+🔐 AUTHENTICATION (/api/v1/auth)
+├── POST /register             - User registration
+├── POST /login                - User login
+├── POST /refresh              - Token refresh
+├── GET /me                    - Get current user info
+└── POST /logout               - User logout
+
+👤 USER MANAGEMENT (/api/v1/users)
+├── GET /                      - Get all users
+├── GET /{user_id}             - Get specific user
+├── PUT /{user_id}             - Update user profile
+└── DELETE /{user_id}          - Delete user account
+
+📝 POSTS & CONTENT (/api/v1/posts)
+├── GET /                      - Get all posts (feed)
+├── POST /                     - Create new post
+├── GET /{post_id}             - Get specific post
+├── PUT /{post_id}             - Update post
+├── DELETE /{post_id}          - Delete post
+├── POST /{post_id}/like       - Like/unlike post
+└── POST /{post_id}/comment    - Add comment to post
+
+💬 MESSAGING (/api/v1/messages)
+├── GET /conversations         - Get user's conversations
+├── GET /chat/{user_id}        - Get chat with specific user
+├── POST /send                 - Send new message
+└── PUT /{message_id}/read     - Mark message as read
+
+🔔 NOTIFICATIONS (/api/v1/notifications)
+├── GET /                      - Get user notifications
+├── POST /                     - Create notification
+├── PUT /{notification_id}/read - Mark notification as read
+└── DELETE /{notification_id}   - Delete notification
+
+📁 FILE UPLOAD (/api/v1/upload)
+├── POST /image                - Upload image file
+├── POST /video                - Upload video file
+└── POST /audio                - Upload audio file
+
+🤖 AI SERVICES (/api/v1/ai)
+├── POST /generate-text        - Jarvis text generation
+├── POST /generate-image       - Scarlet Witch image creation
+├── POST /moderate-content     - Professor X content moderation
+├── POST /speech-to-text       - Black Canary audio transcription
+├── POST /analyze-sentiment    - Mantis sentiment analysis
+├── POST /summarize            - The Flash text summarization
+├── POST /extract-keywords     - Oracle keyword extraction
+├── POST /check-grammar        - Cyborg grammar checking
+├── POST /generate-qr          - Vision QR code generation
+├── POST /weather              - Storm weather information
+├── POST /shorten-url          - Ant-Man URL shortening
+└── POST /check-password       - Batman password security
+
+👥 SOCIAL FEATURES (/api/v1/social)
+├── POST /follow/{user_id}     - Follow user
+├── POST /unfollow/{user_id}   - Unfollow user
+├── GET /followers             - Get user's followers
+├── GET /following             - Get users being followed
+└── GET /suggestions           - Get friend suggestions
+
+🔍 SEARCH (/api/v1/search)
+├── GET /users                 - Search users
+├── GET /posts                 - Search posts
+└── GET /hashtags              - Search hashtags
+
+🛡️ MODERATION (/api/v1/moderation)
+├── POST /report               - Report content
+├── GET /reports               - Get moderation reports (admin)
+└── POST /action               - Take moderation action (admin)
+
+📊 PROFILE MANAGEMENT (/api/v1/profile)
+├── GET /                      - Get current user profile
+├── PUT /                      - Update profile information
+├── POST /avatar               - Update profile picture
+└── GET /stats                 - Get profile statistics
+
+📖 STORIES (/api/v1/stories)
+├── GET /                      - Get all stories
+├── POST /                     - Create new story
+├── GET /{story_id}            - Get specific story
+└── DELETE /{story_id}         - Delete story
+
+🌐 WEBSOCKET CONNECTIONS
+├── /ws/{user_id}              - Real-time chat websocket
+└── /api/v1/notifications/{token} - Real-time notifications
+
+🗄️ DATABASE SCHEMA
+================================================================================
+
+👤 USERS TABLE
+├── id (Primary Key)
+├── username (Unique)
+├── email (Unique)
+├── password_hash
+├── full_name
+├── bio
+├── avatar_url
+├── is_verified
+├── is_active
+├── created_at
+└── updated_at
+
+📝 POSTS TABLE
+├── id (Primary Key)
+├── user_id (Foreign Key → users.id)
+├── content
+├── image_url
+├── video_url
+├── likes_count
+├── comments_count
+├── is_public
+├── created_at
+└── updated_at
+
+💬 MESSAGES TABLE
+├── id (Primary Key)
+├── sender_id (Foreign Key → users.id)
+├── receiver_id (Foreign Key → users.id)
+├── content
+├── is_read
+├── created_at
+└── updated_at
+
+🔔 NOTIFICATIONS TABLE
+├── id (Primary Key)
+├── user_id (Foreign Key → users.id)
+├── type (like, comment, follow, message)
+├── content
+├── is_read
+├── created_at
+└── related_id
+
+👥 FOLLOWS TABLE
+├── id (Primary Key)
+├── follower_id (Foreign Key → users.id)
+├── following_id (Foreign Key → users.id)
+└── created_at
+
+❤️ LIKES TABLE
+├── id (Primary Key)
+├── user_id (Foreign Key → users.id)
+├── post_id (Foreign Key → posts.id)
+└── created_at
+
+💭 COMMENTS TABLE
+├── id (Primary Key)
+├── user_id (Foreign Key → users.id)
+├── post_id (Foreign Key → posts.id)
+├── content
+└── created_at
+
+🔐 AUTHENTICATION FLOW
+================================================================================
+1. User registers/logs in → Backend validates credentials
+2. Backend generates JWT token (24-hour expiry)
+3. Frontend stores token in localStorage
+4. All API requests include Authorization header
+5. Backend validates token on protected routes
+6. Token auto-refreshes every 5 minutes
+7. Expired tokens redirect to login
+
+🤖 AI TOOLS INTEGRATION
+================================================================================
+Each AI tool connects to external APIs:
+├── Jarvis → OpenAI GPT-3.5 Turbo
+├── Scarlet Witch → Stability AI (Image Generation)
+├── Professor X → Google Perspective API
+├── Black Canary → OpenAI Whisper
+├── Mantis → Hugging Face Sentiment Analysis
+├── The Flash → RapidAPI Text Summarization
+├── Oracle → RapidAPI Keyword Extraction
+├── Cyborg → LanguageTool Grammar API
+├── Vision → QR Server API
+├── Storm → OpenWeatherMap API
+├── Ant-Man → Bitly URL Shortener
+└── Batman → Have I Been Pwned API
+
+🌐 TOR NETWORK SETUP
+================================================================================
+1. Nginx proxy serves both frontend and backend on port 8080
+2. Tor hidden service maps .onion:80 → localhost:8080
+3. Frontend uses relative URLs for API calls
+4. All traffic encrypted through Tor network
+5. No external IP exposure
+
+🔧 DEVELOPMENT SETUP
+================================================================================
+1. Backend: uvicorn app.main:app --host 0.0.0.0 --port 8001
+2. Frontend: npm run dev -- --host 0.0.0.0 --port 3000
+3. Nginx: nginx -c nginx-tor.conf
+4. Tor: systemctl start tor
+5. Access via .onion address
+
+📁 PROJECT STRUCTURE
+================================================================================
+website 1/
+├── backend/
+│   ├── app/
+│   │   ├── api/v1/          # API routes
+│   │   ├── core/            # Configuration
+│   │   ├── models/          # Database models
+│   │   ├── services/        # Business logic
+│   │   └── main.py          # FastAPI app
+│   ├── .env                 # Environment variables
+│   └── requirements.txt     # Python dependencies
+├── frontend/
+│   ├── src/
+│   │   ├── components/      # React components
+│   │   ├── pages/           # Next.js pages
+│   │   ├── utils/           # Utility functions
+│   │   └── hooks/           # Custom React hooks
+│   ├── package.json         # Node dependencies
+│   └── next.config.js       # Next.js configuration
+├── nginx-tor.conf           # Nginx proxy configuration
+├── start-tor-services.sh    # Service startup script
+└── SITE_MAPPING.txt         # This file
+
+🚀 DEPLOYMENT NOTES
+================================================================================
+- All services run on localhost for Tor compatibility
+- JWT tokens expire after 24 hours
+- File uploads stored in /uploads directory
+- Database is SQLite for simplicity
+- CORS configured for all origins
+- Rate limiting implemented on API endpoints
+- WebSocket support for real-time features
+
+🔒 SECURITY FEATURES
+================================================================================
+- JWT authentication with refresh tokens
+- Password hashing with bcrypt
+- CORS protection
+- Rate limiting on API endpoints
+- Input validation and sanitization
+- SQL injection prevention with SQLAlchemy
+- XSS protection in frontend
+- Tor network anonymity
+
+================================================================================
+                              END OF MAPPING
+================================================================================

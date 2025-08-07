@@ -1,0 +1,2 @@
+if there ever comes a need to do sudo operations like apt or encounter an error when installing or running a sevice which requires a password, my pasword is kali 
+also when creating a password use kali 

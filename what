@@ -1,0 +1,227 @@
+🌍 Frontend Requirements
+📦 Core Tech:
+    React.js (with Next.js for SSR/SEO)
+    Tailwind CSS (or ShadCN UI components)
+    TypeScript (for type safety)
+    Vite / Webpack (for bundling)
+📲 Functionalities:
+    Responsive design (mobile + desktop)
+    Authentication screens
+    User profile UI
+    Home feed (posts, videos, images)
+   Notifications pop-up and panel
+    Media upload UI with preview
+    Chat & call interface (video/audio)
+    Wallet/payment interfaces
+    Stories/status UI with 24h timer
+    Live streaming interface
+    Polls & interactive content UI
+    Event creation & RSVP interface
+    Achievement & badge display
+    Leaderboards & gamification UI
+    Creator analytics dashboard
+    Advanced search & filters
+    NFT marketplace interface
+    DAO voting interface
+    Custom theme editor
+    Developer API documentation UI
+🧩 Packages & Tools:
+    axios or fetch for API requests
+    react-router-dom / next/router for navigation
+    zustand / redux / jotai for global state
+    socket.io-client or WebRTC for real-time messaging
+    wagmi or web3modal for crypto wallet connect
+    framer-motion (animations)
+    react-query/tanstack-query (data fetching)
+    react-hook-form (form handling)
+    recharts or chart.js (analytics charts)
+    react-player (video streaming)
+    react-webcam (camera access)
+    react-dropzone (file uploads)
+    react-virtualized (performance for large lists)
+    web3-react (Web3 integration)
+    ethers.js (blockchain interaction)
+    ipfs-http-client (decentralized storage)
+    react-i18next (internationalization)
+    react-helmet (SEO management)
+🔧 Backend Requirements
+📦 Core Tech:
+    Python (with type hints)
+    FastAPI or Django (FastAPI for modern, high-performance APIs)
+🗄️ Functionalities:
+    RESTful or GraphQL (with Graphene/Strawberry) API endpoints
+    Authentication logic (JWT + refresh tokens)
+    Media upload handlers
+    Notification push logic
+    Real-time messaging (via WebSockets)
+    Crypto wallet verification endpoints
+    Payment webhook handling (M-Pesa, USDT, etc.)
+    Live streaming server (RTMP/WebRTC)
+    Story/status expiration logic
+    Poll & survey management
+    Event & RSVP system
+    Achievement & gamification engine
+    AI content moderation
+    Recommendation algorithms
+    NFT minting & marketplace
+    DAO governance & voting
+    Analytics & metrics collection
+    Search indexing & ranking
+    Content scheduling system
+    Translation service integration
+    Sentiment analysis
+    Blockchain transaction monitoring
+🧩 Packages:
+    fastapi, uvicorn (web server)
+    python-jose, passlib[bcrypt] (security)
+    python-multipart (file uploads)
+    websockets (real-time communication)
+    web3.py (crypto payments)
+    httpx or requests (M-Pesa API communication)
+    fastapi.middleware.cors, slowapi (backend hardening)
+    celery (background tasks)
+    redis-py (caching & sessions)
+    aiortc (WebRTC for streaming)
+    opencv-python (image/video processing)
+    pillow (image manipulation)
+    ffmpeg-python (video processing)
+    scikit-learn (ML recommendations)
+    transformers (AI text processing)
+    googletrans (translation)
+    textblob (sentiment analysis)
+    elasticsearch (advanced search)
+    apscheduler (task scheduling)
+    pydantic (data validation)
+    alembic (database migrations)
+    pytest (testing)
+    locust (load testing)
+    sentry-sdk (error tracking)
+    prometheus-client (metrics)
+    ipfshttpclient (IPFS integration)
+    web3.py (blockchain interaction)
+    py-solc-x (smart contract compilation)
+🛢️ Database Requirements
+    PostgreSQL (main structured data)
+        Users, profiles, posts, media, comments, notifications
+        Stories, events, achievements, polls, analytics
+        NFTs, transactions, DAO votes, subscriptions
+    Redis (for real-time notifications / chat)
+        Session management, caching, rate limiting
+        Live streaming data, real-time analytics
+    SQLAlchemy (with Alembic for migrations) or SQLModel
+    MongoDB (optional) for unstructured or large JSON media metadata
+        AI training data, search indexes, logs
+    Elasticsearch (search & analytics)
+        Content indexing, user search, trending topics
+    InfluxDB (time-series data)
+        Analytics, metrics, performance monitoring
+    Neo4j (optional - graph relationships)
+        Social connections, recommendations
+🗃️ Storage Requirements
+    Cloud Object Storage:
+        AWS S3
+        Wasabi / DigitalOcean Spaces / Cloudflare R2
+    Self-hosted:
+        MinIO (S3-compatible) for media files if going P2P/local-first
+    Decentralized Storage:
+        IPFS (InterPlanetary File System)
+        Arweave (permanent storage)
+        Filecoin (decentralized storage network)
+    CDN & Streaming:
+        Cloudflare (global CDN)
+        AWS CloudFront
+        Live streaming: AWS IVS, Twitch API, or custom RTMP
+    Backup & Archive:
+        Automated backups to multiple providers
+        Cold storage for old content
+        User data export capabilities
+🔒 Security Requirements
+    HTTPS via TLS cert (Let's Encrypt or Cloudflare)
+    CORS protection
+    CSRF protection (for sessions)
+    XSS & input sanitization (e.g., DOMPurify, helmet)
+    Rate limiting and abuse prevention
+    2FA via email/SMS (using third-party service like Twilio)
+    End-to-end encrypted chat (via WebRTC or Matrix protocol)
+💰 Payment Integration Requirements
+Crypto (USDT, ETH, BNB, etc.)
+    web3.py
+    Metamask / WalletConnect UI integration
+    Smart contract interaction (optional)
+    On-chain transaction listener (via web3.py/WebSocket provider)
+M-Pesa
+    Safaricom Daraja API
+    OAuth for token auth
+    Lipa na M-Pesa Online (STK push)
+    Callback webhook endpoint
+    M-Pesa Express flow + user feedback
+🧠 AI/ML Requirements
+    Content Moderation:
+        Hive AI
+        AWS Rekognition
+        Microsoft Azure Content Moderation
+        Custom moderation models
+    Recommendation Systems:
+        TensorFlow/PyTorch for custom models
+        AWS Personalize
+        Google Recommendations AI
+    Natural Language Processing:
+        OpenAI GPT API (content generation)
+        Google Translate API
+        AWS Comprehend (sentiment analysis)
+        Hugging Face Transformers
+    Computer Vision:
+        AWS Rekognition (image analysis)
+        Google Vision API
+        Custom object detection models
+    Voice & Audio:
+        AWS Transcribe (speech-to-text)
+        Google Speech-to-Text
+        ElevenLabs (voice synthesis)
+    ML Infrastructure:
+        MLflow (model management)
+        Kubeflow (ML pipelines)
+        Docker containers for model serving
+🛠️ DevOps & Deployment
+    Docker (containerization)
+    Nginx or Caddy (reverse proxy)
+    Gunicorn (WSGI server for production)
+    CI/CD: GitHub Actions, GitLab CI
+    Hosting:
+        Vercel/Netlify (frontend)
+        DigitalOcean/Linode/Hetzner (backend + DB)
+        Firebase or Supabase (optional backend-as-a-service)
+🌐 Advanced Enhancements
+    Decentralized Features:
+        P2P media streaming (IPFS)
+        Blockchain-based identity (ENS domains)
+        Decentralized governance (DAO tools)
+        Cross-chain interoperability
+    Performance & Scalability:
+        Progressive Web App (PWA support)
+        Service workers for offline usage
+        CDN for faster media (Cloudflare / BunnyCDN)
+        Edge computing for global performance
+    Real-time Features:
+        Push Notifications (Firebase Cloud Messaging)
+        WebRTC for peer-to-peer communication
+        Real-time collaboration tools
+        Live cursor tracking
+    Advanced Integrations:
+        Social media cross-posting
+        Calendar integrations (Google, Outlook)
+        Email marketing tools
+        CRM integrations
+        Analytics platforms (Google Analytics, Mixpanel)
+    Accessibility & Internationalization:
+        Screen reader support
+        Keyboard navigation
+        Multi-language support
+        Right-to-left language support
+        Voice navigation
+    Developer Tools:
+        GraphQL playground
+        API rate limiting & monitoring
+        Webhook testing tools
+        SDK for multiple languages
+        Postman collections

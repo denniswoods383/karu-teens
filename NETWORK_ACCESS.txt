@@ -1,0 +1,54 @@
+================================================================================
+                    NETWORK ACCESS CONFIGURATION
+================================================================================
+
+🌐 NETWORK SETUP
+================================================================================
+- Tor functionality removed
+- Site accessible from any device on network
+- Backend serves on 0.0.0.0:8001 (all interfaces)
+- Frontend serves on 0.0.0.0:3000 (all interfaces)
+- CORS allows all origins (*)
+
+📱 ACCESS URLS
+================================================================================
+Local Access:
+- Frontend: http://localhost:3000
+- Backend:  http://localhost:8001
+
+Network Access (from any device):
+- Frontend: http://10.0.0.122:3000
+- Backend:  http://10.0.0.122:8001
+
+Mobile/Tablet Access:
+- Same as network URLs above
+- Works on phones, tablets, laptops on same network
+
+🚀 STARTUP
+================================================================================
+Run: ./start-services.sh
+
+This will:
+1. Start backend on all network interfaces
+2. Start frontend on all network interfaces  
+3. Display all access URLs
+4. Show process IDs for stopping services
+
+🔧 MANUAL STARTUP
+================================================================================
+Backend:
+cd backend
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8001
+
+Frontend:
+cd frontend
+npm run dev -- --host 0.0.0.0 --port 3000
+
+🌐 NETWORK REQUIREMENTS
+================================================================================
+- All devices must be on same local network
+- Firewall must allow ports 3000 and 8001
+- No additional proxy or Tor setup needed
+- Direct IP access from any device
+
+================================================================================
