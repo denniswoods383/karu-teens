@@ -1,251 +1,170 @@
-import { getAPIBaseURL } from '../../utils/ipDetection';
 import { useState } from 'react';
-import { useAuthStore } from '../../store/authStore';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useSupabase';
+import { uploadToCloudinary } from '../../lib/cloudinary';
 
 interface CreatePostProps {
-  onPostCreated: () => void;
+  onPostCreated?: () => void;
 }
 
 export default function CreatePost({ onPostCreated }: CreatePostProps) {
   const [content, setContent] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [fileType, setFileType] = useState<'image' | 'video' | 'audio' | 'document' | null>(null);
   const [loading, setLoading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const { user } = useAuthStore();
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
+  const { user } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim()) return;
+    if ((!content.trim() && files.length === 0) || !user) return;
 
     setLoading(true);
     try {
-      let mediaUrl = '';
+      let attachments = [];
       
-      if (file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const token = localStorage.getItem('token');
-        
-        // Upload with progress tracking
-        const xhr = new XMLHttpRequest();
-        
-        const uploadPromise = new Promise((resolve, reject) => {
-          xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable) {
-              const progress = Math.round((e.loaded / e.total) * 100);
-              setUploadProgress(progress);
-            }
-          });
-          
-          xhr.addEventListener('load', () => {
-            if (xhr.status === 200) {
-              const response = JSON.parse(xhr.responseText);
-              resolve(response.url);
-            } else {
-              reject(new Error('Upload failed'));
-            }
-          });
-          
-          xhr.addEventListener('error', () => reject(new Error('Upload failed')));
-          
-          xhr.open('POST', `${getAPIBaseURL()}/api/v1/upload/`);
-          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-          xhr.send(formData);
-        });
-        
+      // Upload files to Cloudinary
+      for (const file of files) {
         try {
-          mediaUrl = await uploadPromise as string;
-          setUploadProgress(0);
+          const cloudinaryResult = await uploadToCloudinary(file, (progress) => {
+            setUploadProgress(prev => ({ ...prev, [file.name]: progress }));
+          });
+          
+          attachments.push({
+            type: file.type,
+            url: cloudinaryResult.url,
+            name: file.name,
+            size: file.size
+          });
         } catch (error) {
-          console.error('Upload failed:', error);
-          setUploadProgress(0);
+          console.error('Failed to upload file:', file.name, error);
         }
       }
 
-      const token = localStorage.getItem('token');
-      await fetch(`${getAPIBaseURL()}/api/v1/posts/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          content,
-          image_url: mediaUrl
-        })
-      });
+      const { error } = await supabase
+        .from('posts')
+        .insert({
+          user_id: user.id,
+          content: content.trim(),
+          attachments: attachments.length > 0 ? attachments : null,
+          image_url: attachments.length > 0 ? attachments[0].url : null
+        });
 
-      setContent('');
-      setFile(null);
-      setFileType(null);
-      onPostCreated();
+      if (!error) {
+        setContent('');
+        setFiles([]);
+        setUploadProgress({});
+        onPostCreated?.();
+      }
     } catch (error) {
-      console.error('Failed to create post');
+      console.error('Failed to create post:', error);
     } finally {
       setLoading(false);
     }
   };
+  
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    
+    // Check file sizes
+    selectedFiles.forEach(file => {
+      if (file.type.startsWith('video/') && file.size > 50 * 1024 * 1024) { // 50MB limit
+        alert(`Video ${file.name} is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Please use videos under 50MB.`);
+        return;
+      }
+    });
+    
+    const validFiles = selectedFiles.filter(file => {
+      if (file.type.startsWith('video/')) {
+        return file.size <= 50 * 1024 * 1024; // 50MB limit for videos
+      }
+      return true;
+    });
+    
+    setFiles(prev => [...prev, ...validFiles]);
+  };
+  
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
-      <div className="p-4">
-        <div className="flex space-x-3">
-          <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-            {user?.username[0].toUpperCase()}
+    <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl shadow-lg border border-blue-100 p-6 mb-6">
+      <form onSubmit={handleSubmit}>
+        <div className="flex items-start space-x-4 mb-4">
+          <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
+            🎓
           </div>
-          <div className="flex-1">
-            <form onSubmit={handleSubmit}>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder={`What's on your mind, ${user?.username}?`}
-                className="w-full p-3 bg-gray-100 rounded-3xl resize-none focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
-                rows={3}
-              />
-              
-              {file && (
-                <div className="mt-3 relative">
-                  {fileType === 'image' ? (
-                    <img 
-                      src={URL.createObjectURL(file)} 
-                      alt="Preview" 
-                      className="max-h-64 rounded-lg"
-                    />
-                  ) : fileType === 'video' ? (
-                    <video 
-                      src={URL.createObjectURL(file)} 
-                      controls
-                      className="max-h-64 rounded-lg"
-                    />
-                  ) : fileType === 'audio' ? (
-                    <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6 rounded-lg">
-                      <div className="flex items-center space-x-4 mb-4">
-                        <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-                          <span className="text-2xl">🎵</span>
-                        </div>
-                        <div className="text-white">
-                          <p className="font-medium truncate">{file.name}</p>
-                          <p className="text-sm opacity-75">
-                            {(file.size / (1024 * 1024)).toFixed(2)} MB • Audio
-                          </p>
-                        </div>
-                      </div>
-                      <audio 
-                        src={URL.createObjectURL(file)} 
-                        controls
-                        className="w-full"
-                      />
-                    </div>
-                  ) : (
-                    <div className="bg-gray-100 p-4 rounded-lg flex items-center space-x-3">
-                      <div className="w-12 h-12 rounded-lg flex items-center justify-center text-white text-xl"
-                           style={{ backgroundColor: file.type.includes('pdf') ? '#EF4444' : file.type.includes('doc') ? '#2563EB' : '#10B981' }}>
-                        {file.type.includes('pdf') ? '📄' : 
-                         file.type.includes('doc') ? '📄' :
-                         file.type.includes('zip') ? '🗄' :
-                         file.type.includes('audio') ? '🎧' : '📁'}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 truncate">{file.name}</p>
-                        <p className="text-sm text-gray-500">
-                          {(file.size / (1024 * 1024)).toFixed(2)} MB • {file.type.split('/')[1]?.toUpperCase() || 'FILE'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {uploadProgress > 0 && uploadProgress < 100 && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg flex items-center justify-center">
-                      <div className="bg-white rounded-lg p-4 text-center">
-                        <div className="w-16 h-16 mx-auto mb-2">
-                          <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 36 36">
-                            <path
-                              className="text-gray-300"
-                              stroke="currentColor"
-                              strokeWidth="3"
-                              fill="none"
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            />
-                            <path
-                              className="text-blue-600"
-                              stroke="currentColor"
-                              strokeWidth="3"
-                              strokeDasharray={`${uploadProgress}, 100`}
-                              strokeLinecap="round"
-                              fill="none"
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            />
-                          </svg>
-                        </div>
-                        <p className="text-sm font-medium">{uploadProgress}%</p>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <button
-                    type="button"
-                    onClick={() => { setFile(null); setFileType(null); setUploadProgress(0); }}
-                    className="absolute top-2 right-2 bg-gray-800 bg-opacity-75 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-opacity-100"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-              
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-                <div className="flex items-center space-x-4">
-                  <label className="flex items-center space-x-2 text-gray-600 hover:bg-gray-100 px-3 py-2 rounded-lg cursor-pointer">
-                    <span className="text-xl">📷</span>
-                    <span className="font-medium">Attach File</span>
-                    <input
-                      type="file"
-                      accept="*/*"
-                      onChange={(e) => {
-                        const selectedFile = e.target.files?.[0];
-                        if (selectedFile) {
-                          // Check file size (50MB limit)
-                          if (selectedFile.size > 50 * 1024 * 1024) {
-                            alert('File size must be less than 50MB');
-                            return;
-                          }
-                          
-                          setFile(selectedFile);
-                          
-                          if (selectedFile.type.startsWith('image/')) {
-                            setFileType('image');
-                          } else if (selectedFile.type.startsWith('video/')) {
-                            setFileType('video');
-                          } else if (selectedFile.type.startsWith('audio/')) {
-                            setFileType('audio');
-                          } else {
-                            setFileType('document');
-                          }
-                        }
-                      }}
-                      className="hidden"
-                    />
-                  </label>
-                  
-                  <button type="button" className="flex items-center space-x-2 text-gray-600 hover:bg-gray-100 px-3 py-2 rounded-lg">
-                    <span className="text-xl">😊</span>
-                    <span className="font-medium">Feeling/Activity</span>
-                  </button>
-                </div>
-                
-                <button
-                  type="submit"
-                  disabled={!content.trim() || loading}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Posting...' : 'Post'}
-                </button>
-              </div>
-            </form>
-          </div>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="What's happening on campus? Share your thoughts! 📚✨"
+            className="flex-1 p-4 border-2 border-blue-200 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-white/80 backdrop-blur-sm text-gray-800 placeholder-blue-400"
+            rows={3}
+          />
         </div>
-      </div>
+        
+        {/* File Upload */}
+        <div className="mt-4">
+          <input
+            type="file"
+            multiple
+            accept="image/*,video/*"
+            onChange={handleFileSelect}
+            className="hidden"
+            id="file-upload"
+          />
+          <label
+            htmlFor="file-upload"
+            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-full cursor-pointer hover:from-blue-600 hover:to-cyan-600 transition-all duration-300 transform hover:scale-105 shadow-lg font-medium"
+          >
+            📸 Add Media
+          </label>
+        </div>
+        
+        {/* Selected Files */}
+        {files.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {files.map((file, index) => (
+              <div key={index} className="bg-gray-50 p-2 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-lg">{file.type.startsWith('video/') ? '🎥' : '📷'}</span>
+                    <span className="text-sm text-gray-700 truncate">{file.name}</span>
+                    <span className="text-xs text-gray-500">({(file.size / 1024 / 1024).toFixed(1)}MB)</span>
+                  </div>
+                  <button
+                    onClick={() => removeFile(index)}
+                    className="text-red-500 hover:text-red-700 text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {uploadProgress[file.name] && (
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress[file.name]}%` }}
+                    ></div>
+                    <div className="text-xs text-center mt-1 text-blue-600 font-medium">
+                      {uploadProgress[file.name]}% uploaded
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        
+        <div className="flex justify-end mt-4">
+          <button
+            type="submit"
+            disabled={(!content.trim() && files.length === 0) || loading}
+            className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-8 py-3 rounded-full hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 transition-all duration-300 transform hover:scale-105 shadow-lg font-bold"
+          >
+            {loading ? '🚀 Posting...' : '✨ Share'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

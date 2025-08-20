@@ -1,69 +1,45 @@
 import ProtectedRoute from '../../components/auth/ProtectedRoute';
 import PostFeed from '../../components/posts/PostFeed';
-import DirectMessages from '../../components/messages/DirectMessages';
-import NotificationsList from '../../components/notifications/NotificationsList';
-import LiveNotifications from '../../components/notifications/LiveNotifications';
+import CreatePost from '../../components/posts/CreatePost';
 import AutoHideNavbar from '../../components/layout/AutoHideNavbar';
-import ResponsiveLayout from '../../components/layout/ResponsiveLayout';
-import StoriesBar from '../../components/stories/StoriesBar';
-import AdvancedSearch from '../../components/search/AdvancedSearch';
-import QuickActions from '../../components/home/QuickActions';
+import { useState } from 'react';
 
 export default function FeedPage() {
+  const [refreshPosts, setRefreshPosts] = useState(false);
+  
   return (
     <ProtectedRoute>
-      <ResponsiveLayout backgroundImage="/ui/feedbackground.jpeg" className="bg-gradient-1">
+      <div className="min-h-screen bg-gradient-to-br from-blue-100 via-cyan-50 to-indigo-100">
         <AutoHideNavbar />
 
-        <div className="pt-16 sm:pt-20 pb-6">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-6">
-            {/* Left Sidebar - Hidden on mobile */}
-            <div className="hidden lg:block">
-              <div className="sticky top-20">
-                <QuickActions />
-              </div>
-            </div>
-
-            {/* Main Feed */}
-            <div className="col-span-1 lg:col-span-2">
-              <StoriesBar />
-              <PostFeed />
-            </div>
-
-            {/* Right Sidebar - Hidden on mobile */}
-            <div className="hidden lg:block space-y-6">
-              <div className="sticky top-20 space-y-6">
-                <AdvancedSearch />
-                <NotificationsList />
-                <DirectMessages />
-              </div>
-            </div>
+        <div className="pt-20 pb-8 max-w-3xl mx-auto px-4">
+          <div className="space-y-6">
+            <CreatePost onPostCreated={() => setRefreshPosts(prev => !prev)} />
+            <PostFeed key={refreshPosts.toString()} />
           </div>
 
           {/* Mobile Bottom Navigation */}
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2">
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-blue-200 px-4 py-3 shadow-2xl">
             <div className="flex justify-around items-center">
-              <button className="p-2 text-gray-600 hover:text-blue-600">
-                🏠
+              <button className="p-3 text-blue-600 hover:text-cyan-600 transition-all duration-300 transform hover:scale-125">
+                <span className="text-2xl">🏠</span>
               </button>
-              <button className="p-2 text-gray-600 hover:text-blue-600">
-                🔍
+              <button className="p-3 text-blue-600 hover:text-cyan-600 transition-all duration-300 transform hover:scale-125">
+                <span className="text-2xl">🔍</span>
               </button>
-              <button className="p-2 text-gray-600 hover:text-blue-600">
-                ➕
+              <button className="p-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-full hover:from-blue-700 hover:to-cyan-700 transition-all duration-300 transform hover:scale-125 shadow-lg">
+                <span className="text-2xl">➕</span>
               </button>
-              <button className="p-2 text-gray-600 hover:text-blue-600">
-                💬
+              <button className="p-3 text-blue-600 hover:text-cyan-600 transition-all duration-300 transform hover:scale-125">
+                <span className="text-2xl">💬</span>
               </button>
-              <button className="p-2 text-gray-600 hover:text-blue-600">
-                👤
+              <button className="p-3 text-blue-600 hover:text-cyan-600 transition-all duration-300 transform hover:scale-125">
+                <span className="text-2xl">🎓</span>
               </button>
             </div>
           </div>
         </div>
-        
-        <LiveNotifications />
-      </ResponsiveLayout>
+      </div>
     </ProtectedRoute>
   );
 }

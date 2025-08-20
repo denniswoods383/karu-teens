@@ -9,6 +9,7 @@ export default function MenuPage() {
     { icon: '👤', label: 'Profile', action: () => window.location.href = `/profile/${user?.id}` },
     { icon: '💬', label: 'Messages', action: () => window.location.href = '/messages' },
     { icon: '👥', label: 'Comrades', action: () => window.location.href = '/comrades' },
+    { icon: '📚', label: 'MWAKS', action: () => window.location.href = '/mwaks' },
     { icon: '🔔', label: 'Notifications', action: () => window.location.href = '/notifications' },
     { icon: '⚙️', label: 'Settings', action: () => window.location.href = '/settings' },
     { icon: '📊', label: 'Analytics', action: () => window.location.href = '/analytics' },

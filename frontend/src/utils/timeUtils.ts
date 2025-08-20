@@ -1,30 +1,20 @@
-export const getRelativeTime = (dateString: string): string => {
+export function getRelativeTime(timestamp: string): string {
   const now = new Date();
-  const postDate = new Date(dateString);
-  
-  // Convert to Nairobi timezone
-  const nairobiNow = new Date(now.toLocaleString("en-US", {timeZone: "Africa/Nairobi"}));
-  const nairobiPostDate = new Date(postDate.toLocaleString("en-US", {timeZone: "Africa/Nairobi"}));
-  
-  const diffInMs = nairobiNow.getTime() - nairobiPostDate.getTime();
-  const diffInSeconds = Math.floor(diffInMs / 1000);
-  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
-  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
-  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+  const postTime = new Date(timestamp);
+  const diffInSeconds = Math.floor((now.getTime() - postTime.getTime()) / 1000);
 
   if (diffInSeconds < 60) {
-    return 'now';
-  } else if (diffInMinutes < 60) {
-    return `${diffInMinutes} min ago`;
-  } else if (diffInHours < 24) {
-    return `${diffInHours}hrs ago`;
-  } else if (diffInDays <= 7) {
-    return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+    return `${diffInSeconds}s ago`;
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `${minutes}m ago`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours}h ago`;
+  } else if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400);
+    return `${days}d ago`;
   } else {
-    return nairobiPostDate.toLocaleDateString('en-KE') + ' ' + nairobiPostDate.toLocaleTimeString('en-KE', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Africa/Nairobi'
-    });
+    return postTime.toLocaleDateString();
   }
-};
+}

@@ -1,24 +1,21 @@
-import { getAPIBaseURL } from '../../utils/ipDetection';
 import { useState, useEffect, useRef } from 'react';
 import ProtectedRoute from '../../components/auth/ProtectedRoute';
 import AutoHideNavbar from '../../components/layout/AutoHideNavbar';
-import ProfilePhoto from '../../components/user/ProfilePhoto';
-import MessageStatus from '../../components/messages/MessageStatus';
-import { useAuthStore } from '../../store/authStore';
-import { useWebSocket } from '../../hooks/useWebSocket';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useSupabase';
 
 interface Message {
-  id: number;
-  sender_id: number;
-  receiver_id: number;
+  id: string;
+  sender_id: string;
+  receiver_id: string;
   content: string;
-  is_delivered: boolean;
-  is_read: boolean;
+  is_delivered?: boolean;
+  is_read?: boolean;
   created_at: string;
 }
 
 interface Conversation {
-  id: number;
+  id: string;
   username: string;
   full_name: string;
   last_message?: string;
@@ -27,15 +24,17 @@ interface Conversation {
 
 export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedChat, setSelectedChat] = useState<number | null>(null);
+  const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [showNewChat, setShowNewChat] = useState(false);
   const [searchUsers, setSearchUsers] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const { user } = useAuthStore();
-  const { isConnected, onlineUsers, typingUsers, sendMessage: sendWsMessage, onMessage, sendTyping } = useWebSocket(user?.id);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<{[key: string]: number}>({});
+  const [isTyping, setIsTyping] = useState(false);
+  const { user } = useAuth();
   const typingTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -50,86 +49,90 @@ export default function MessagesPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const userId = urlParams.get('user');
     if (userId) {
-      setSelectedChat(parseInt(userId));
+      setSelectedChat(userId);
       // Add user to conversations if not already there
-      addUserToConversations(parseInt(userId));
+      addUserToConversations(userId);
     }
   }, []);
 
   useEffect(() => {
     if (selectedChat) {
       loadMessages(selectedChat);
+      
+      // Subscribe to real-time messages
+      const channel = supabase.channel(`messages-${selectedChat}`);
+      
+      channel
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        }, (payload) => {
+          const newMessage = payload.new as Message;
+          console.log('Real-time message received:', newMessage);
+          
+          // Only add if it's for this conversation
+          if ((newMessage.sender_id === user?.id && newMessage.receiver_id === selectedChat) ||
+              (newMessage.sender_id === selectedChat && newMessage.receiver_id === user?.id)) {
+            setMessages(prev => {
+              // Avoid duplicates
+              if (prev.find(msg => msg.id === newMessage.id)) return prev;
+              console.log('Adding message to UI:', newMessage);
+              return [...prev, newMessage];
+            });
+          }
+        })
+        .subscribe((status) => {
+          console.log('Subscription status:', status);
+        });
+      
+      console.log('Subscribed to messages for chat:', selectedChat);
+      
+      // Fallback: Poll for new messages every 3 seconds
+      const pollInterval = setInterval(() => {
+        loadMessages(selectedChat);
+      }, 3000);
+      
+      return () => {
+        console.log('Unsubscribing from messages');
+        channel.unsubscribe();
+        clearInterval(pollInterval);
+      };
     }
-  }, [selectedChat]);
+  }, [selectedChat, user?.id]);
 
   useEffect(() => {
     // Scroll to bottom when messages change
     const container = document.getElementById('messages-container');
     if (container) {
-      container.scrollTop = container.scrollHeight;
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+      }, 100); // Small delay to ensure message is rendered
     }
   }, [messages]);
 
-  useEffect(() => {
-    // Handle incoming messages
-    onMessage('new_message', (data) => {
-      if (data.sender_id === selectedChat || data.receiver_id === selectedChat) {
-        setMessages(prev => [...prev, {
-          id: data.id,
-          sender_id: data.sender_id,
-          receiver_id: data.receiver_id,
-          content: data.content,
-          is_delivered: data.is_delivered || false,
-          is_read: data.is_read,
-          created_at: data.created_at
-        }]);
-      }
-      
-      // Refresh conversations to update unread counts
-      loadConversations();
-      
-      // Show notification if not in current chat and not from current user
-      if (data.sender_id !== selectedChat && data.sender_id !== user?.id) {
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification(`New message from ${data.sender_username}`, {
-            body: data.content,
-            icon: '/favicon.ico'
-          });
-        }
-      }
-    });
-    
-    // Handle read receipts
-    onMessage('message_read', (data) => {
-      setMessages(prev => prev.map(msg => 
-        msg.id === data.message_id 
-          ? { ...msg, is_read: true }
-          : msg
-      ));
-    });
-  }, [selectedChat, user?.id, onMessage]);
+  // Simplified without WebSocket for now
 
   const loadConversations = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/messages/conversations`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      setConversations(data);
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, username, full_name')
+        .limit(10);
+      setConversations(data || []);
     } catch (error) {
       console.error('Failed to load conversations');
     }
   };
 
-  const loadMessages = async (userId: number) => {
+  const loadMessages = async (userId: string) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://10.0.0.122:8001/api/v1/messages/chat/${userId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      setMessages(data);
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${user?.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user?.id}),and(sender_id.is.null,receiver_id.eq.${user?.id})`)
+        .order('created_at', { ascending: true });
+      setMessages(data || []);
     } catch (error) {
       console.error('Failed to load messages');
     }
@@ -144,68 +147,75 @@ export default function MessagesPage() {
     // Clear input immediately
     setNewMessage('');
     
-    // Stop typing indicator
+    // Clear typing timeout
     if (typingTimeout.current) {
       clearTimeout(typingTimeout.current);
     }
-    sendTyping(selectedChat, false);
     
-    // Add message to UI immediately for better UX
+    // Add message immediately as fallback
     const tempMessage = {
-      id: Date.now(),
-      sender_id: user?.id || 0,
+      id: `temp-${Date.now()}`,
+      sender_id: user?.id || '',
       receiver_id: selectedChat,
       content: messageContent,
-      is_delivered: true,  // Show as delivered immediately
-      is_read: false,
       created_at: new Date().toISOString()
     };
     setMessages(prev => [...prev, tempMessage]);
     
     try {
-      const token = localStorage.getItem('token');
+      console.log('Sending message:', {
+        sender_id: user?.id,
+        receiver_id: selectedChat,
+        content: messageContent
+      });
       
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/messages/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          sender_id: user?.id,
           receiver_id: selectedChat,
           content: messageContent
         })
-      });
+        .select();
       
-      if (!response.ok) {
-        // Remove the message if it failed to send and restore input
-        setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
+      if (error) {
+        console.error('Failed to send message:', error);
         setNewMessage(messageContent);
+      } else {
+        console.log('Message sent successfully:', data);
+        // Remove temp message and add real one if different
+        if (data && data[0]) {
+          setMessages(prev => {
+            const filtered = prev.filter(msg => !msg.id.toString().startsWith('temp-'));
+            const realMessage = data[0];
+            if (!filtered.find(msg => msg.id === realMessage.id)) {
+              return [...filtered, realMessage];
+            }
+            return filtered;
+          });
+        }
       }
     } catch (error) {
       console.error('Network error:', error);
-      // Remove the message if it failed to send and restore input
-      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
       setNewMessage(messageContent);
     }
   };
 
-  const addUserToConversations = async (userId: number) => {
+  const addUserToConversations = async (userId: string) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://10.0.0.122:8001/api/v1/users/${userId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, username, full_name')
+        .eq('id', userId)
+        .single();
       
-      if (response.ok) {
-        const userData = await response.json();
+      if (data) {
         const userExists = conversations.find(c => c.id === userId);
-        
         if (!userExists) {
           setConversations(prev => [...prev, {
-            id: userData.id,
-            username: userData.username,
-            full_name: userData.full_name
+            id: data.id,
+            username: data.username || data.id,
+            full_name: data.full_name || 'Student'
           }]);
         }
       }
@@ -216,38 +226,28 @@ export default function MessagesPage() {
 
   const loadAllUsers = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/users/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, username, full_name')
+        .neq('id', user?.id)
+        .limit(20);
       
-      if (response.ok) {
-        const users = await response.json();
-        // Filter out current user
-        const otherUsers = users.filter((u: any) => u.id !== user?.id);
+      if (data) {
+        const users = data.map(u => ({
+          ...u,
+          username: u.username || u.id,
+          full_name: u.full_name || 'Student'
+        }));
         
-        // Sort by recent conversations first, then alphabetically
-        const conversationUserIds = conversations.map(c => c.id);
-        const sortedUsers = otherUsers.sort((a: any, b: any) => {
-          const aInConversations = conversationUserIds.includes(a.id);
-          const bInConversations = conversationUserIds.includes(b.id);
-          
-          if (aInConversations && !bInConversations) return -1;
-          if (!aInConversations && bInConversations) return 1;
-          
-          // Both in conversations or both not - sort alphabetically
-          return (a.full_name || a.username).localeCompare(b.full_name || b.username);
-        });
-        
-        setAllUsers(sortedUsers);
-        setSearchUsers(sortedUsers);
+        setAllUsers(users);
+        setSearchUsers(users);
       }
     } catch (error) {
       console.error('Failed to load users');
     }
   };
 
-  const startNewChat = (userId: number) => {
+  const startNewChat = (userId: string) => {
     setSelectedChat(userId);
     setShowNewChat(false);
     addUserToConversations(userId);
@@ -310,16 +310,8 @@ export default function MessagesPage() {
                           className="w-full p-4 text-left hover:bg-gray-50 border-b border-gray-100 transition-colors"
                         >
                           <div className="flex items-center space-x-3">
-                            <div className="relative">
-                              <ProfilePhoto 
-                                userId={user.id}
-                                username={user.username}
-                                size="md"
-                                showBadges={false}
-                              />
-                              {onlineUsers.includes(user.id) && (
-                                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
-                              )}
+                            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">
+                              🎓
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-gray-900 truncate">
@@ -354,12 +346,9 @@ export default function MessagesPage() {
                           }`}
                         >
                           <div className="flex items-center space-x-3">
-                            <ProfilePhoto 
-                              userId={conv.id}
-                              username={conv.username}
-                              size="md"
-                              showBadges={false}
-                            />
+                            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">
+                              🎓
+                            </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-gray-900 truncate">
                                 {conv.full_name || conv.username}
@@ -399,16 +388,8 @@ export default function MessagesPage() {
                   {/* Chat Header */}
                   <div className="p-4 border-b bg-gray-50">
                     <div className="flex items-center space-x-3">
-                      <div className="relative">
-                        <ProfilePhoto 
-                          userId={selectedChat}
-                          username={conversations.find(c => c.id === selectedChat)?.username || ''}
-                          size="sm"
-                          showBadges={false}
-                        />
-                        {onlineUsers.includes(selectedChat || 0) && (
-                          <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
-                        )}
+                      <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">
+                        🎓
                       </div>
                       <div>
                         <h3 className="font-semibold text-gray-900">
@@ -416,96 +397,138 @@ export default function MessagesPage() {
                            conversations.find(c => c.id === selectedChat)?.username}
                         </h3>
                         <p className="text-sm text-gray-500">
-                          {typingUsers[selectedChat || 0] ? (
-                            <span className="text-green-600">typing...</span>
-                          ) : onlineUsers.includes(selectedChat || 0) ? (
-                            <span className="text-green-600">online</span>
-                          ) : (
-                            `@${conversations.find(c => c.id === selectedChat)?.username}`
-                          )}
+                          @{conversations.find(c => c.id === selectedChat)?.username}
                         </p>
                       </div>
                     </div>
                   </div>
                   
                   {/* Messages */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4" id="messages-container">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-blue-50/30 to-cyan-50/30" id="messages-container">
                     {messages.length > 0 ? (
                       messages.map((message) => (
                         <div
                           key={message.id}
-                          className={`flex ${message.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
+                          className={`flex ${message.sender_id === user?.id ? 'justify-end' : 'justify-start'} animate-fadeIn`}
                         >
                           <div
-                            className={`max-w-sm px-4 py-2 rounded-2xl ${
+                            className={`max-w-sm px-4 py-3 rounded-2xl shadow-md transition-all duration-300 hover:shadow-lg ${
                               message.sender_id === user?.id
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-200 text-gray-900'
+                                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white'
+                                : 'bg-white text-gray-900 border border-gray-200'
                             }`}
                           >
-                            <p className="text-sm">{message.content}</p>
-                            <div className={`flex items-center justify-between mt-1 ${
+                            {message.sender_id === null && (
+                              <div className="flex items-center space-x-2 mb-2">
+                                <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-medium">ADMIN</span>
+                              </div>
+                            )}
+                            <p className="text-sm leading-relaxed">{message.content}</p>
+                            <div className={`flex items-center justify-between mt-2 ${
                               message.sender_id === user?.id ? 'text-blue-100' : 'text-gray-500'
                             }`}>
-                              <p className="text-xs">
+                              <p className="text-xs font-medium">
                                 {new Date(message.created_at).toLocaleTimeString([], {
                                   hour: '2-digit',
                                   minute: '2-digit'
                                 })}
                               </p>
-                              <MessageStatus 
-                                isDelivered={message.is_delivered || false}
-                                isRead={message.is_read}
-                                isSentByMe={message.sender_id === user?.id}
-                              />
+                              <span className="text-xs">
+                                {message.sender_id === user?.id ? (
+                                  <span className="flex items-center space-x-1">
+                                    <span>✓✓</span>
+                                    <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                                  </span>
+                                ) : null}
+                              </span>
                             </div>
                           </div>
                         </div>
                       ))
                     ) : (
                       <div className="flex-1 flex items-center justify-center text-gray-500">
-                        <p>No messages yet. Start the conversation!</p>
+                        <div className="text-center">
+                          <span className="text-4xl mb-4 block">💬</span>
+                          <p className="text-lg font-medium">Start the conversation!</p>
+                          <p className="text-sm">Send a message to get started</p>
+                        </div>
                       </div>
                     )}
                   </div>
                   
                   {/* Message Input */}
-                  <form onSubmit={sendMessage} className="p-4 border-t bg-gray-50">
-                    <div className="flex space-x-3">
+                  <form onSubmit={sendMessage} className="p-4 border-t bg-gradient-to-r from-blue-50 to-cyan-50">
+                    {/* File Preview */}
+                    {selectedFiles.length > 0 && (
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {selectedFiles.map((file, index) => (
+                          <div key={index} className="bg-white rounded-lg p-2 border border-blue-200 flex items-center space-x-2">
+                            <span className="text-sm">{file.type.startsWith('image/') ? '📷' : '📄'}</span>
+                            <span className="text-xs text-gray-600 truncate max-w-20">{file.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== index))}
+                              className="text-red-500 hover:text-red-700 text-xs"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    <div className="flex items-end space-x-3">
+                      {/* File Upload Button */}
                       <input
-                        type="text"
-                        value={newMessage}
+                        type="file"
+                        multiple
+                        accept="image/*,video/*,.pdf,.doc,.docx"
                         onChange={(e) => {
-                          setNewMessage(e.target.value);
-                          
-                          // Handle typing indicator
-                          if (selectedChat) {
-                            sendTyping(selectedChat, true);
-                            
-                            if (typingTimeout.current) {
-                              clearTimeout(typingTimeout.current);
-                            }
-                            
-                            typingTimeout.current = setTimeout(() => {
-                              sendTyping(selectedChat, false);
-                            }, 1000);
-                          }
+                          const files = Array.from(e.target.files || []);
+                          setSelectedFiles(prev => [...prev, ...files]);
                         }}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            sendMessage(e);
-                          }
-                        }}
-                        placeholder="Type a message..."
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="hidden"
+                        id="file-upload"
                       />
+                      <label
+                        htmlFor="file-upload"
+                        className="p-3 bg-white border-2 border-blue-200 rounded-full hover:bg-blue-50 cursor-pointer transition-colors"
+                      >
+                        <span className="text-xl">📎</span>
+                      </label>
+                      
+                      {/* Message Input */}
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={newMessage}
+                          onChange={(e) => {
+                            setNewMessage(e.target.value);
+                            setIsTyping(e.target.value.length > 0);
+                          }}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              sendMessage(e);
+                            }
+                          }}
+                          placeholder="Type a message... 😊"
+                          className="w-full px-4 py-3 border-2 border-blue-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-white shadow-sm"
+                        />
+                        {isTyping && (
+                          <div className="absolute -top-6 left-2 text-xs text-blue-500 bg-white px-2 py-1 rounded-full shadow-sm">
+                            typing...
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Send Button */}
                       <button
                         type="submit"
-                        disabled={!newMessage.trim()}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        disabled={!newMessage.trim() && selectedFiles.length === 0}
+                        className="p-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-full hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg"
                       >
-                        Send
+                        <span className="text-xl">🚀</span>
                       </button>
                     </div>
                   </form>

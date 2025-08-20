@@ -1,321 +1,248 @@
-import { getAPIBaseURL } from '../../utils/ipDetection';
 import { useState, useEffect } from 'react';
-
-interface ProfileData {
-  first_name?: string;
-  last_initial?: string;
-  student_id?: string;
-  year_program?: string;
-  clubs_societies?: string[];
-  hobbies?: string[];
-  skills?: string[];
-  study_groups?: string[];
-  achievements?: string[];
-  fun_bio?: string;
-  linkedin_url?: string;
-  github_url?: string;
-  interest_tags?: string[];
-  show_real_name?: boolean;
-  show_contact_info?: boolean;
-  show_location?: boolean;
-}
+import { useAuth } from '../../hooks/useSupabase';
+import { supabase } from '../../lib/supabase';
 
 interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: ProfileData) => void;
+  profile: any;
+  onSave: (profile: any) => void;
 }
 
-export default function EditProfileModal({ isOpen, onClose, onSave }: EditProfileModalProps) {
-  const [formData, setFormData] = useState<ProfileData>({});
-  const [activeTab, setActiveTab] = useState('identity');
+export default function EditProfileModal({ isOpen, onClose, profile, onSave }: EditProfileModalProps) {
+  const { user } = useAuth();
+  const [formData, setFormData] = useState({
+    username: '',
+    full_name: '',
+    bio: '',
+    location: '',
+    website: '',
+    birth_date: '',
+    phone: '',
+    interests: '',
+    education: '',
+    year_of_study: '',
+    major: ''
+  });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      loadProfile();
-    }
-  }, [isOpen]);
-
-  const loadProfile = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/profile/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+    if (profile) {
+      setFormData({
+        username: profile.username || user?.email?.split('@')[0] || '',
+        full_name: profile.full_name || '',
+        bio: profile.bio || '',
+        location: profile.location || '',
+        website: profile.website || '',
+        birth_date: profile.birth_date || '',
+        phone: profile.phone || '',
+        interests: profile.interests || '',
+        education: profile.education || '',
+        year_of_study: profile.year_of_study || '',
+        major: profile.major || ''
       });
-      const data = await response.json();
-      setFormData(data);
-    } catch (error) {
-      console.error('Failed to load profile');
     }
-  };
+  }, [profile, user]);
 
-  const handleSave = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`${getAPIBaseURL()}/api/v1/profile/me`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
-      });
-      onSave(formData);
-      onClose();
-    } catch (error) {
-      console.error('Failed to save profile');
-    }
-  };
+      const { data, error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user?.id,
+          ...formData,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
 
-  const updateArrayField = (field: keyof ProfileData, value: string) => {
-    const current = (formData[field] as string[]) || [];
-    const items = value.split(',').map(item => item.trim()).filter(item => item);
-    setFormData({ ...formData, [field]: items });
+      if (!error && data) {
+        onSave(data);
+      }
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        <div className="p-6 border-b">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold">Edit Profile</h2>
-            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-              ✕
-            </button>
-          </div>
-          
-          <div className="flex space-x-4 mt-4">
+            <h2 className="text-2xl font-bold text-gray-900">✏️ Edit Profile</h2>
             <button
-              onClick={() => setActiveTab('identity')}
-              className={`px-4 py-2 rounded-lg ${activeTab === 'identity' ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
+              onClick={onClose}
+              className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:text-gray-800 hover:bg-gray-200"
             >
-              Identity
-            </button>
-            <button
-              onClick={() => setActiveTab('interests')}
-              className={`px-4 py-2 rounded-lg ${activeTab === 'interests' ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
-            >
-              Interests
-            </button>
-            <button
-              onClick={() => setActiveTab('academic')}
-              className={`px-4 py-2 rounded-lg ${activeTab === 'academic' ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
-            >
-              Academic
-            </button>
-            <button
-              onClick={() => setActiveTab('social')}
-              className={`px-4 py-2 rounded-lg ${activeTab === 'social' ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
-            >
-              Social
-            </button>
-            <button
-              onClick={() => setActiveTab('privacy')}
-              className={`px-4 py-2 rounded-lg ${activeTab === 'privacy' ? 'bg-blue-100 text-blue-600' : 'text-gray-600'}`}
-            >
-              Privacy
+              ×
             </button>
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-96">
-          {activeTab === 'identity' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                  <input
-                    type="text"
-                    value={formData.first_name || ''}
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Initial</label>
-                  <input
-                    type="text"
-                    maxLength={1}
-                    value={formData.last_initial || ''}
-                    onChange={(e) => setFormData({ ...formData, last_initial: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
-                <input
-                  type="text"
-                  value={formData.student_id || ''}
-                  onChange={(e) => setFormData({ ...formData, student_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Year/Program</label>
-                <input
-                  type="text"
-                  placeholder="e.g., Journalism, Year 2"
-                  value={formData.year_program || ''}
-                  onChange={(e) => setFormData({ ...formData, year_program: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Basic Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Username *</label>
+              <input
+                type="text"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                required
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                placeholder="your_username"
+              />
             </div>
-          )}
-
-          {activeTab === 'interests' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Clubs & Societies</label>
-                <input
-                  type="text"
-                  placeholder="AI Club, Drama Society (comma separated)"
-                  value={(formData.clubs_societies || []).join(', ')}
-                  onChange={(e) => updateArrayField('clubs_societies', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Hobbies</label>
-                <input
-                  type="text"
-                  placeholder="Photography, Coding, Football (comma separated)"
-                  value={(formData.hobbies || []).join(', ')}
-                  onChange={(e) => updateArrayField('hobbies', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Skills</label>
-                <input
-                  type="text"
-                  placeholder="Python, Public Speaking (comma separated)"
-                  value={(formData.skills || []).join(', ')}
-                  onChange={(e) => updateArrayField('skills', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+              <input
+                type="text"
+                value={formData.full_name}
+                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                placeholder="Your Full Name"
+              />
             </div>
-          )}
+          </div>
 
-          {activeTab === 'academic' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Study Groups</label>
-                <input
-                  type="text"
-                  placeholder="Math Study Group (comma separated)"
-                  value={(formData.study_groups || []).join(', ')}
-                  onChange={(e) => updateArrayField('study_groups', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Achievements</label>
-                <input
-                  type="text"
-                  placeholder="Debate Champion 2023 (comma separated)"
-                  value={(formData.achievements || []).join(', ')}
-                  onChange={(e) => updateArrayField('achievements', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+          {/* Bio */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
+            <textarea
+              value={formData.bio}
+              onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+              rows={3}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none"
+              placeholder="Tell us about yourself..."
+            />
+          </div>
+
+          {/* Contact Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+              <input
+                type="text"
+                value={formData.location}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                placeholder="City, Country"
+              />
             </div>
-          )}
-
-          {activeTab === 'social' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fun Bio</label>
-                <textarea
-                  placeholder="Coffee + Code = Life"
-                  value={formData.fun_bio || ''}
-                  onChange={(e) => setFormData({ ...formData, fun_bio: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">LinkedIn URL</label>
-                <input
-                  type="url"
-                  value={formData.linkedin_url || ''}
-                  onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">GitHub URL</label>
-                <input
-                  type="url"
-                  value={formData.github_url || ''}
-                  onChange={(e) => setFormData({ ...formData, github_url: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Interest Tags</label>
-                <input
-                  type="text"
-                  placeholder="#StartupLover, #Bookworm (comma separated)"
-                  value={(formData.interest_tags || []).join(', ')}
-                  onChange={(e) => updateArrayField('interest_tags', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                placeholder="+1234567890"
+              />
             </div>
-          )}
+          </div>
 
-          {activeTab === 'privacy' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Show Real Name</span>
-                <input
-                  type="checkbox"
-                  checked={formData.show_real_name || false}
-                  onChange={(e) => setFormData({ ...formData, show_real_name: e.target.checked })}
-                  className="rounded"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Show Contact Info</span>
-                <input
-                  type="checkbox"
-                  checked={formData.show_contact_info || false}
-                  onChange={(e) => setFormData({ ...formData, show_contact_info: e.target.checked })}
-                  className="rounded"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Show Location</span>
-                <input
-                  type="checkbox"
-                  checked={formData.show_location || false}
-                  onChange={(e) => setFormData({ ...formData, show_location: e.target.checked })}
-                  className="rounded"
-                />
-              </div>
+          {/* Education Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Education</label>
+              <input
+                type="text"
+                value={formData.education}
+                onChange={(e) => setFormData({ ...formData, education: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                placeholder="University/School Name"
+              />
             </div>
-          )}
-        </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Year of Study</label>
+              <select
+                value={formData.year_of_study}
+                onChange={(e) => setFormData({ ...formData, year_of_study: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+              >
+                <option value="">Select Year</option>
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+                <option value="4th Year">4th Year</option>
+                <option value="Graduate">Graduate</option>
+                <option value="Postgraduate">Postgraduate</option>
+              </select>
+            </div>
+          </div>
 
-        <div className="p-6 border-t flex justify-end space-x-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Save Changes
-          </button>
-        </div>
+          {/* Additional Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Major/Field</label>
+              <input
+                type="text"
+                value={formData.major}
+                onChange={(e) => setFormData({ ...formData, major: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                placeholder="Computer Science, Medicine, etc."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Birth Date</label>
+              <input
+                type="date"
+                value={formData.birth_date}
+                onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Interests & Website */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Interests</label>
+              <input
+                type="text"
+                value={formData.interests}
+                onChange={(e) => setFormData({ ...formData, interests: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                placeholder="Sports, Music, Technology..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Website</label>
+              <input
+                type="url"
+                value={formData.website}
+                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                placeholder="https://yourwebsite.com"
+              />
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-2xl hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !formData.username.trim()}
+              className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-8 py-3 rounded-2xl hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 transition-all duration-300 transform hover:scale-105 shadow-lg font-bold"
+            >
+              {loading ? '💾 Saving...' : '✅ Save Profile'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

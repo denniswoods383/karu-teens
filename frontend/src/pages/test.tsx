@@ -1,5 +1,5 @@
-import { getAPIBaseURL } from '../../utils/ipDetection';
 import { useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 export default function TestPage() {
   const [result, setResult] = useState('');
@@ -16,18 +16,16 @@ export default function TestPage() {
 
   const testLogin = async () => {
     try {
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: 'testuser3@example.com',
-          password: 'password123'
-        })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: 'testuser3@example.com',
+        password: 'password123'
       });
-      const data = await response.json();
-      setResult('Login Success: ' + JSON.stringify(data));
+      
+      if (error) {
+        setResult('Login Error: ' + error.message);
+      } else {
+        setResult('Login Success: ' + JSON.stringify(data.user));
+      }
     } catch (error) {
       setResult('Login Error: ' + error.message);
     }

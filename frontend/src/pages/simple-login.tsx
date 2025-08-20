@@ -1,6 +1,6 @@
-import { getAPIBaseURL } from '../../utils/ipDetection';
 import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { supabase } from '../lib/supabase';
 
 export default function SimpleLogin() {
   const [email, setEmail] = useState('testuser3@example.com');
@@ -11,22 +11,18 @@ export default function SimpleLogin() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       });
-      const data = await response.json();
-      if (response.ok) {
-        login(data.access_token, data.user);
+      
+      if (error) {
+        setResult('Error: ' + error.message);
+      } else if (data.user) {
         setResult('Login successful! Redirecting...');
         setTimeout(() => {
           window.location.href = '/feed';
         }, 500);
-      } else {
-        setResult('Error: ' + data.detail);
       }
     } catch (error) {
       setResult('Network Error: ' + error.message);

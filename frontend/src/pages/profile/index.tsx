@@ -1,404 +1,287 @@
-import { getAPIBaseURL } from '../../utils/ipDetection';
 import { useState, useEffect } from 'react';
+import { useAuth } from '../../hooks/useSupabase';
+import { supabase } from '../../lib/supabase';
+import { uploadToCloudinary } from '../../lib/cloudinary';
 import ProtectedRoute from '../../components/auth/ProtectedRoute';
 import AutoHideNavbar from '../../components/layout/AutoHideNavbar';
-import ResponsiveLayout from '../../components/layout/ResponsiveLayout';
-import ProfilePhoto from '../../components/user/ProfilePhoto';
-import PostCard from '../../components/posts/PostCard';
-import { useAuthStore } from '../../store/authStore';
-import { Post } from '../../types/post';
-
-interface UserProfile {
-  id: number;
-  username: string;
-  full_name: string;
-  email: string;
-  bio?: string;
-  followers_count: number;
-  following_count: number;
-  posts_count: number;
-}
+import EditProfileModal from '../../components/profile/EditProfileModal';
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<any>(null);
   const [posts, setPosts] = useState([]);
-  const [badges, setBadges] = useState([]);
+  const [stats, setStats] = useState({ followers: 0, following: 0, likes: 0, posts: 0 });
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showPhotoModal, setShowPhotoModal] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const { user } = useAuthStore();
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadProfile();
-      loadUserPosts();
-      loadBadges();
+      loadPosts();
+      loadStats();
     }
   }, [user]);
 
   const loadProfile = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/profile/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user?.id)
+        .single();
       
-      if (response.ok) {
-        const data = await response.json();
-        setProfile(data);
+      if (error && error.code === 'PGRST116') {
+        // Profile doesn't exist, create it
+        const newProfile = {
+          id: user?.id,
+          username: user?.email?.split('@')[0] || 'student',
+          full_name: 'Student',
+          created_at: new Date().toISOString()
+        };
+        
+        const { data: createdProfile } = await supabase
+          .from('profiles')
+          .insert(newProfile)
+          .select()
+          .single();
+        
+        setProfile(createdProfile || newProfile);
       } else {
-        // Fallback to user data
-        setProfile({
-          id: user.id,
-          username: user.username,
-          full_name: user.full_name || user.username,
-          email: user.email,
-          bio: '',
-          posts_count: 0,
-          followers_count: 0,
-          following_count: 0
-        });
+        setProfile(data || { id: user?.id, username: user?.email?.split('@')[0] });
       }
     } catch (error) {
       console.error('Failed to load profile:', error);
     }
   };
 
-  const loadUserPosts = async () => {
+  const loadPosts = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/posts/user/${user?.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const { data } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
       
-      if (response.ok) {
-        const data = await response.json();
-        setPosts(Array.isArray(data) ? data : []);
-      } else {
-        // Fallback: load all posts and filter by user
-        const allPostsResponse = await fetch(`${getAPIBaseURL()}/api/v1/posts/`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (allPostsResponse.ok) {
-          const allPosts = await allPostsResponse.json();
-          const userPosts = allPosts.filter((post: any) => post.author.id === user?.id);
-          setPosts(userPosts);
-        } else {
-          setPosts([]);
-        }
-      }
+      setPosts(data || []);
     } catch (error) {
       console.error('Failed to load posts:', error);
-      setPosts([]);
     }
   };
 
-  const loadBadges = async () => {
+  const loadStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://10.0.0.122:8001/api/v1/users/${user?.id}/badges`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      // Count posts
+      const { count: postsCount } = await supabase
+        .from('posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user?.id);
+
+      // Count likes received
+      const { count: likesCount } = await supabase
+        .from('likes')
+        .select('*', { count: 'exact', head: true })
+        .in('post_id', posts.map(p => p.id));
+
+      // Count followers
+      const { count: followersCount } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', user?.id);
+
+      // Count following
+      const { count: followingCount } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', user?.id);
+
+      setStats({
+        posts: postsCount || 0,
+        likes: likesCount || 0,
+        followers: followersCount || 0,
+        following: followingCount || 0
       });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setBadges(data);
-      }
     } catch (error) {
-      console.error('Failed to load badges');
+      console.error('Failed to load stats:', error);
     }
   };
 
-  const handlePhotoUpload = async (file: File) => {
-    setUploadingPhoto(true);
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      const result = await uploadToCloudinary(file);
       
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/upload/`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        // Update user profile photo
-        await fetch(`${getAPIBaseURL()}/api/v1/profile/me`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ profile_photo: data.url })
-        });
-        
-        loadProfile();
+      const { data, error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user?.id,
+          avatar_url: result.url,
+          username: profile?.username || user?.email?.split('@')[0] || 'student',
+          full_name: profile?.full_name || 'Student'
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        setProfile(data);
+        console.log('Photo uploaded successfully:', data);
+      } else {
+        console.error('Photo upload error:', error);
       }
     } catch (error) {
-      console.error('Failed to upload photo');
+      console.error('Failed to upload photo:', error);
     } finally {
-      setUploadingPhoto(false);
+      setUploading(false);
     }
   };
 
-  if (!profile) return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Loading profile...</p>
-      </div>
-    </div>
-  );
+  const deletePost = async (postId: string) => {
+    if (!confirm('Are you sure you want to delete this post?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId);
+
+      if (!error) {
+        setPosts(prev => prev.filter(p => p.id !== postId));
+        loadStats(); // Refresh stats
+      }
+    } catch (error) {
+      console.error('Failed to delete post:', error);
+    }
+  };
 
   return (
     <ProtectedRoute>
-      <ResponsiveLayout className="bg-gradient-3">
+      <div className="min-h-screen bg-gradient-to-br from-blue-100 via-cyan-50 to-indigo-100">
         <AutoHideNavbar />
         
-        <div className="pt-16 sm:pt-20 pb-6 pb-20 lg:pb-6">
-          {/* Profile Photo Update Button - Always Visible */}
-          <div className="mb-4 text-center">
-            <button 
-              onClick={() => setShowPhotoModal(true)}
-              className="bg-red-600 text-white px-8 py-4 rounded-lg hover:bg-red-700 font-bold text-lg shadow-xl"
-            >
-              🔥 CHANGE PROFILE PHOTO 🔥
-            </button>
-          </div>
-          
-          {/* Cover Photo */}
-          <div className="bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 h-32 sm:h-48 md:h-64 rounded-t-lg relative overflow-hidden">
-            <div className="absolute inset-0 bg-black bg-opacity-20"></div>
-            <div className="absolute bottom-2 sm:bottom-4 left-3 sm:left-6">
+        <div className="pt-20 pb-8 max-w-4xl mx-auto px-4">
+          {/* Profile Header */}
+          <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <div className="flex flex-col md:flex-row items-center md:items-start space-y-6 md:space-y-0 md:space-x-8">
+              {/* Profile Photo */}
               <div className="relative">
-                <ProfilePhoto 
-                  userId={profile.id}
-                  username={profile.username}
-                  profilePhoto={profile.profile_photo}
-                  size="xl"
-                  showBadges={true}
-                  className="border-4 border-white shadow-lg"
-                />
-                <label className="absolute bottom-0 right-0 bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-blue-700 shadow-lg">
-                  📷
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handlePhotoUpload(file);
-                    }}
-                    className="hidden"
-                  />
-                </label>
-                {uploadingPhoto && (
-                  <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-b-lg shadow-sm border border-gray-200">
-            {/* Profile Info */}
-            <div className="pt-16 px-6 pb-6 border-b">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <h1 className="text-3xl font-bold text-gray-900">{profile.full_name || profile.username}</h1>
-                  <p className="text-gray-600 text-lg">@{profile.username}</p>
-                  <p className="text-blue-600 mt-1">Computer Science Student | Web Developer</p>
-                  <p className="text-gray-700 mt-3 max-w-2xl">Passionate about technology and innovation. Building the future one line of code at a time. 🚀</p>
-                  
-                  <div className="flex items-center space-x-4 mt-4 text-gray-600">
-                    <span className="flex items-center space-x-1">
-                      <span>📍</span>
-                      <span>Nairobi, Kenya</span>
-                    </span>
-                    <span className="flex items-center space-x-1">
-                      <span>📅</span>
-                      <span>Joined {new Date().getFullYear()}</span>
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-4 sm:gap-6 mt-6">
-                    <div className="text-center">
-                      <p className="font-bold text-xl sm:text-2xl text-gray-900">{profile.posts_count}</p>
-                      <p className="text-xs sm:text-sm text-gray-600">Posts</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="font-bold text-xl sm:text-2xl text-gray-900">{profile.followers_count}</p>
-                      <p className="text-xs sm:text-sm text-gray-600">Followers</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="font-bold text-xl sm:text-2xl text-gray-900">{profile.following_count}</p>
-                      <p className="text-xs sm:text-sm text-gray-600">Following</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="font-bold text-xl sm:text-2xl text-gray-900">{badges.length}</p>
-                      <p className="text-xs sm:text-sm text-gray-600">Badges</p>
-                    </div>
-                  </div>
-
-                  {/* Badges Display */}
-                  {badges.length > 0 && (
-                    <div className="mt-6">
-                      <h3 className="font-semibold text-gray-900 mb-3">Achievements</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {badges.slice(0, 8).map((badge: any) => (
-                          <div
-                            key={badge.id}
-                            className="flex items-center space-x-2 px-3 py-2 rounded-full text-white text-sm font-medium shadow-sm"
-                            style={{ backgroundColor: badge.color }}
-                            title={badge.description}
-                          >
-                            <span>{badge.icon}</span>
-                            <span>{badge.name}</span>
-                          </div>
-                        ))}
-                        {badges.length > 8 && (
-                          <div className="flex items-center px-3 py-2 bg-gray-200 rounded-full text-gray-700 text-sm font-medium">
-                            +{badges.length - 8} more
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                <div className="w-32 h-32 rounded-full overflow-hidden bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center text-white text-4xl font-bold shadow-2xl">
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    '🎓'
                   )}
                 </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  id="photo-upload"
+                />
+                <label
+                  htmlFor="photo-upload"
+                  className="absolute bottom-0 right-0 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white cursor-pointer hover:bg-blue-700 shadow-lg"
+                >
+                  {uploading ? '⏳' : '📷'}
+                </label>
+              </div>
+
+              {/* Profile Info */}
+              <div className="flex-1 text-center md:text-left">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  {profile?.full_name || 'Student'}
+                </h1>
+                <p className="text-xl text-blue-600 mb-4">@{profile?.username || user?.email?.split('@')[0]}</p>
                 
-                <div className="flex flex-col gap-3">
-                  <button 
-                    onClick={() => setShowPhotoModal(true)}
-                    className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2 shadow-lg transform hover:scale-105 transition-all"
-                  >
-                    📷 Update Profile Photo
-                  </button>
-                  <button 
-                    onClick={() => setShowEditModal(true)}
-                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium shadow-lg transform hover:scale-105 transition-all"
-                  >
-                    ✏️ Edit Profile
-                  </button>
+                {profile?.bio && (
+                  <p className="text-gray-600 mb-4">{profile.bio}</p>
+                )}
+
+                {/* Stats */}
+                <div className="grid grid-cols-4 gap-4 mb-6">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-900">{stats.posts}</div>
+                    <div className="text-sm text-gray-600">Posts</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-900">{stats.followers}</div>
+                    <div className="text-sm text-gray-600">Followers</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-900">{stats.following}</div>
+                    <div className="text-sm text-gray-600">Following</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-900">{stats.likes}</div>
+                    <div className="text-sm text-gray-600">Likes</div>
+                  </div>
                 </div>
+
+                {/* Edit Profile Button */}
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-3 rounded-full hover:from-blue-700 hover:to-cyan-700 transition-all duration-300 transform hover:scale-105 shadow-lg font-bold"
+                >
+                  ✏️ Edit Profile
+                </button>
               </div>
             </div>
+          </div>
 
-            {/* Skills & Interests */}
-            <div className="px-6 py-4 border-b bg-gray-50">
-              <h3 className="font-semibold text-gray-900 mb-3">Skills & Interests</h3>
-              <div className="flex flex-wrap gap-2">
-                {['Python', 'JavaScript', 'React', 'Node.js', 'UI/UX', 'Photography', 'Gaming'].map((skill) => (
-                  <span key={skill} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-                    {skill}
-                  </span>
+          {/* Posts Grid */}
+          <div className="bg-white rounded-2xl shadow-xl p-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">My Posts</h2>
+            
+            {posts.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {posts.map((post: any) => (
+                  <div key={post.id} className="bg-gray-50 rounded-2xl p-4 relative group">
+                    <button
+                      onClick={() => deletePost(post.id)}
+                      className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center hover:bg-red-600"
+                    >
+                      🗑️
+                    </button>
+                    
+                    {post.image_url && (
+                      <div className="mb-3">
+                        {post.image_url.includes('.mp4') || post.image_url.includes('.webm') ? (
+                          <video src={post.image_url} className="w-full h-40 object-cover rounded-lg" />
+                        ) : (
+                          <img src={post.image_url} alt="Post" className="w-full h-40 object-cover rounded-lg" />
+                        )}
+                      </div>
+                    )}
+                    
+                    <p className="text-gray-800 text-sm mb-2 line-clamp-3">{post.content}</p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(post.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
                 ))}
               </div>
-            </div>
-
-            {/* Activity Tabs */}
-            <div className="border-b">
-              <div className="flex space-x-8 px-6">
-                <button className="py-4 border-b-2 border-blue-600 text-blue-600 font-medium">
-                  Posts ({profile.posts_count})
-                </button>
-                <button className="py-4 text-gray-500 hover:text-gray-700">
-                  Media
-                </button>
-                <button className="py-4 text-gray-500 hover:text-gray-700">
-                  Likes
-                </button>
+            ) : (
+              <div className="text-center py-12">
+                <span className="text-6xl mb-4 block">📝</span>
+                <p className="text-gray-500 text-lg">No posts yet</p>
+                <p className="text-gray-400">Share your first post to get started!</p>
               </div>
-            </div>
-
-            {/* Posts */}
-            <div className="p-3 sm:p-6">
-              {posts.length > 0 ? (
-                <div className="space-y-4">
-                  {posts.map((post: Post) => (
-                    <PostCard key={post.id} post={post} />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl">📝</span>
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No posts yet</h3>
-                  <p className="text-gray-500">Share your first post to get started!</p>
-                  <button 
-                    onClick={() => window.location.href = '/feed'}
-                    className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-                  >
-                    Create Your First Post
-                  </button>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
-        {/* Profile Photo Update Modal */}
-        {showPhotoModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-md w-full p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Update Profile Photo</h3>
-                <button 
-                  onClick={() => setShowPhotoModal(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
-              </div>
-              
-              <div className="text-center">
-                <div className="mb-4">
-                  <ProfilePhoto 
-                    userId={profile.id}
-                    username={profile.username}
-                    profilePhoto={profile.profile_photo}
-                    size="xl"
-                    showBadges={false}
-                    className="mx-auto"
-                  />
-                </div>
-                
-                <label className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 cursor-pointer inline-block">
-                  {uploadingPhoto ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Uploading...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      📷 Choose New Photo
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        handlePhotoUpload(file);
-                        setShowPhotoModal(false);
-                      }
-                    }}
-                    className="hidden"
-                    disabled={uploadingPhoto}
-                  />
-                </label>
-                
-                <p className="text-sm text-gray-500 mt-3">
-                  Choose a photo that represents you. Max size: 50MB
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </ResponsiveLayout>
+        <EditProfileModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          profile={profile}
+          onSave={(updatedProfile) => {
+            setProfile(updatedProfile);
+            setShowEditModal(false);
+          }}
+        />
+      </div>
     </ProtectedRoute>
   );
 }

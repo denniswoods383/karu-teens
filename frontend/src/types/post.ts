@@ -1,14 +1,14 @@
 import { User } from './auth';
 
 export interface Post {
-  id: number;
+  id: string;
   content: string;
   image_url?: string;
-  author_id: number;
-  author: User;
+  user_id: string;
   likes_count: number;
   comments_count: number;
   created_at: string;
+  attachments?: any;
 }
 
 export interface Comment {

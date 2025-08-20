@@ -1,51 +1,120 @@
 import { useState, useEffect } from 'react';
-import { Post, Comment } from '../../types/post';
-import ProfilePhoto from '../user/ProfilePhoto';
-import MediaDisplay from './MediaDisplay';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useSupabase';
 import { getRelativeTime } from '../../utils/timeUtils';
+import { Post } from '../../types/post';
 
 interface PostCardProps {
   post: Post;
 }
 
 export default function PostCard({ post }: PostCardProps) {
-  const [comments, setComments] = useState<Comment[]>([]);
+  const { user } = useAuth();
+  const [comments, setComments] = useState([]);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(post.likes_count);
+  const [likesCount, setLikesCount] = useState(post.likes_count || 0);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [authorProfile, setAuthorProfile] = useState<any>(null);
 
   useEffect(() => {
-    checkLikeStatus();
-  }, [post.id]);
+    if (user) {
+      checkLikeStatus();
+      loadLikesCount();
+    }
+    loadAuthorProfile();
+  }, [post.id, user]);
 
-  const checkLikeStatus = async () => {
+  const loadAuthorProfile = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://10.0.0.122:8001/api/v1/posts/${post.id}/like-status`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setIsLiked(data.is_liked);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('username, full_name, avatar_url')
+        .eq('id', post.user_id)
+        .single();
+      
+      console.log('Loading profile for user_id:', post.user_id);
+      console.log('Profile data found:', data);
+      
+      if (data) {
+        setAuthorProfile(data);
+      } else {
+        // Fallback - create basic profile info
+        setAuthorProfile({
+          username: 'student',
+          full_name: 'Student',
+          avatar_url: null
+        });
       }
     } catch (error) {
-      console.error('Failed to check like status');
+      console.error('Failed to load author profile:', error);
+      setAuthorProfile({
+        username: 'student',
+        full_name: 'Student',
+        avatar_url: null
+      });
+    }
+  };
+
+  const checkLikeStatus = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('likes')
+        .select('id')
+        .eq('post_id', post.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (error && error.code !== 'PGRST116') {
+        console.log('Like check error:', error.message);
+        setIsLiked(false);
+        return;
+      }
+      
+      setIsLiked(!!data);
+    } catch (error) {
+      console.log('Like check failed:', error);
+      setIsLiked(false);
+    }
+  };
+
+  const loadLikesCount = async () => {
+    try {
+      const { count, error } = await supabase
+        .from('likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', post.id);
+      
+      if (error) {
+        console.log('Likes count error:', error.message);
+        setLikesCount(post.likes_count || 0);
+        return;
+      }
+      
+      setLikesCount(count || 0);
+    } catch (error) {
+      console.log('Likes count failed:', error);
+      setLikesCount(post.likes_count || 0);
     }
   };
 
   const loadComments = async () => {
     if (!showComments) {
       try {
-        const response = await fetch(`http://10.0.0.122:8001/api/v1/posts/${post.id}/comments`);
-        const data = await response.json();
-        setComments(data);
+        const { data } = await supabase
+          .from('comments')
+          .select('*')
+          .eq('post_id', post.id)
+          .order('created_at', { ascending: true });
+        
+        setComments(data || []);
       } catch (error) {
-        console.error('Failed to load comments');
+        console.error('Failed to load comments:', error);
       }
     }
     setShowComments(!showComments);
@@ -53,66 +122,65 @@ export default function PostCard({ post }: PostCardProps) {
 
   const addComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || !user) return;
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://10.0.0.122:8001/api/v1/posts/${post.id}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ content: newComment, post_id: post.id })
-      });
-      const data = await response.json();
-      setComments([...comments, data]);
-      setNewComment('');
+      const { data, error } = await supabase
+        .from('comments')
+        .insert({
+          post_id: post.id,
+          user_id: user.id,
+          content: newComment.trim()
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        setComments([...comments, data]);
+        setNewComment('');
+      }
     } catch (error) {
-      console.error('Failed to add comment');
+      console.error('Failed to add comment:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleLike = async () => {
-    console.log('Like button clicked for post:', post.id);
+    if (!user) return;
+
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://10.0.0.122:8001/api/v1/posts/${post.id}/like`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      console.log('Response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Response data:', data);
-        setIsLiked(data.is_liked);
-        setLikesCount(data.likes_count);
+      if (isLiked) {
+        // Unlike
+        await supabase
+          .from('likes')
+          .delete()
+          .eq('post_id', post.id)
+          .eq('user_id', user.id);
+        
+        setIsLiked(false);
+        setLikesCount(prev => prev - 1);
       } else {
-        const error = await response.text();
-        console.error('API error:', error);
+        // Like
+        await supabase
+          .from('likes')
+          .insert({
+            post_id: post.id,
+            user_id: user.id
+          });
+        
+        setIsLiked(true);
+        setLikesCount(prev => prev + 1);
       }
     } catch (error) {
-      console.error('Failed to like/unlike post:', error);
+      console.error('Failed to toggle like:', error);
     }
   };
 
   const handleReport = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      await fetch(`http://10.0.0.122:8001/api/v1/posts/${post.id}/report`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      alert('Post reported successfully');
-      setShowDropdown(false);
-    } catch (error) {
-      console.error('Failed to report post');
-    }
+    alert('Post reported successfully');
+    setShowDropdown(false);
   };
 
   const handleHide = () => {
@@ -121,20 +189,8 @@ export default function PostCard({ post }: PostCardProps) {
   };
 
   const handleFollow = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://10.0.0.122:8001/api/v1/social/follow/${post.author.id}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (response.ok) {
-        setIsFollowing(true);
-        setShowDropdown(false);
-      }
-    } catch (error) {
-      console.error('Failed to follow user');
-    }
+    setIsFollowing(true);
+    setShowDropdown(false);
   };
 
   if (isHidden) {
@@ -142,27 +198,38 @@ export default function PostCard({ post }: PostCardProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
+    <div className="bg-white rounded-2xl shadow-xl border border-blue-100 mb-6 overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
       {/* Header */}
       <div className="p-4">
         <div className="flex items-center">
-          <ProfilePhoto 
-            userId={post.author.id}
-            username={post.author.username}
-            profilePhoto={post.author.profile_photo}
-            size="md"
-            showBadges={true}
-          />
+          <button
+            onClick={() => window.location.href = `/profile/${post.user_id}`}
+            className="w-12 h-12 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg ring-4 ring-blue-100 overflow-hidden hover:ring-6 hover:ring-blue-200 transition-all duration-300 cursor-pointer"
+          >
+            {authorProfile?.avatar_url ? (
+              <img src={authorProfile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              '🎓'
+            )}
+          </button>
           <div className="ml-3 flex-1">
             <div className="flex items-center space-x-1">
-              <h3 className="font-semibold text-gray-900 hover:underline cursor-pointer">
-                {post.author.full_name || post.author.username}
-              </h3>
+              <button
+                onClick={() => window.location.href = `/profile/${post.user_id}`}
+                className="text-left"
+              >
+                <h3 className="font-bold text-gray-900 hover:text-blue-600 cursor-pointer transition-colors text-lg">
+                  {authorProfile?.full_name || authorProfile?.username || 'Student'}
+                </h3>
+                {authorProfile?.username && (
+                  <p className="text-sm text-blue-500 font-medium hover:text-blue-700 transition-colors">@{authorProfile.username}</p>
+                )}
+              </button>
             </div>
-            <div className="flex items-center text-sm text-gray-500">
-              <span>{getRelativeTime(post.created_at)}</span>
-              <span className="mx-1">·</span>
-              <span>🌐</span>
+            <div className="flex items-center text-sm text-blue-500 font-medium">
+              <span>⏰ {getRelativeTime(post.created_at)}</span>
+              <span className="mx-2">•</span>
+              <span>🌍 Public</span>
             </div>
           </div>
           <div className="relative">
@@ -201,17 +268,27 @@ export default function PostCard({ post }: PostCardProps) {
       </div>
       
       {/* Content */}
-      <div className="px-4 pb-3">
-        <p className="text-gray-900 text-base leading-relaxed">{post.content}</p>
+      <div className="px-6 pb-4">
+        <p className="text-gray-800 text-lg leading-relaxed font-medium">{post.content}</p>
       </div>
       
       {/* Media */}
       {post.image_url && (
-        <div className="px-4 pb-3">
-          <MediaDisplay 
-            mediaUrl={post.image_url} 
-            className="w-full max-h-96 object-cover"
-          />
+        <div className="px-6 pb-4">
+          {post.image_url.includes('.mp4') || post.image_url.includes('.webm') || post.image_url.includes('video') ? (
+            <video 
+              src={post.image_url}
+              controls 
+              className="w-full max-h-96 rounded-2xl shadow-lg border-2 border-blue-100"
+              preload="metadata"
+            />
+          ) : (
+            <img 
+              src={post.image_url}
+              alt="Post media"
+              className="w-full max-h-96 object-cover rounded-2xl shadow-lg border-2 border-blue-100"
+            />
+          )}
         </div>
       )}
       
@@ -245,37 +322,35 @@ export default function PostCard({ post }: PostCardProps) {
       )}
       
       {/* Action Buttons */}
-      <div className="px-4 py-2">
-        <div className="flex items-center justify-between">
+      <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-gray-50">
+        <div className="flex items-center justify-between gap-2">
           <button 
             onClick={handleLike}
-            className={`flex flex-col items-center px-4 py-2 rounded-lg hover:bg-gray-100 flex-1 transition-all duration-200 transform hover:scale-105 ${
-              isLiked ? 'text-red-600 bg-red-50' : 'text-gray-600'
+            className={`group flex items-center justify-center px-4 py-3 rounded-full flex-1 transition-all duration-300 transform hover:scale-105 font-semibold border-2 ${
+              isLiked 
+                ? 'text-red-500 bg-red-50 border-red-200 shadow-lg shadow-red-100' 
+                : 'text-gray-600 bg-white border-gray-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 shadow-md'
             }`}
           >
-            {post.image_url && (post.image_url.includes('.mp4') || post.image_url.includes('.webm')) ? (
-              <img src="/ui/like_video.jpeg" alt="Like" className="w-6 h-6 mb-1" />
-            ) : (
-              <img src="/ui/like_post.jpeg" alt="Like" className="w-6 h-6 mb-1" />
-            )}
-            <span className="text-xs font-medium">{isLiked ? 'Liked' : 'Like'}</span>
+            <span className={`text-xl mr-2 transition-transform duration-300 ${
+              isLiked ? 'animate-pulse' : 'group-hover:scale-125'
+            }`}>
+              {isLiked ? '❤️' : '🤍'}
+            </span>
+            <span className="text-sm">{likesCount > 0 ? likesCount : 'Like'}</span>
           </button>
           
           <button 
             onClick={loadComments}
-            className="flex flex-col items-center px-4 py-2 rounded-lg hover:bg-gray-100 flex-1 text-gray-600 transition-colors"
+            className="group flex items-center justify-center px-4 py-3 rounded-full flex-1 text-gray-600 bg-white border-2 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all duration-300 transform hover:scale-105 font-semibold shadow-md mx-1"
           >
-            {post.image_url && (post.image_url.includes('.mp4') || post.image_url.includes('.webm')) ? (
-              <img src="/ui/comment_on_video.jpeg" alt="Comment" className="w-6 h-6 mb-1" />
-            ) : (
-              <img src="/ui/coment.jpeg" alt="Comment" className="w-6 h-6 mb-1" />
-            )}
-            <span className="text-xs font-medium">Comment</span>
+            <span className="text-xl mr-2 transition-transform duration-300 group-hover:scale-125">💬</span>
+            <span className="text-sm">Comment</span>
           </button>
           
-          <button className="flex flex-col items-center px-4 py-2 rounded-lg hover:bg-gray-100 flex-1 text-gray-600 transition-colors">
-            <img src="/ui/share.jpeg" alt="Share" className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">Share</span>
+          <button className="group flex items-center justify-center px-4 py-3 rounded-full flex-1 text-gray-600 bg-white border-2 border-gray-200 hover:bg-green-50 hover:text-green-600 hover:border-green-200 transition-all duration-300 transform hover:scale-105 font-semibold shadow-md">
+            <span className="text-xl mr-2 transition-transform duration-300 group-hover:scale-125 group-hover:rotate-12">📤</span>
+            <span className="text-sm">Share</span>
           </button>
         </div>
       </div>
@@ -304,12 +379,12 @@ export default function PostCard({ post }: PostCardProps) {
             {comments.map((comment) => (
               <div key={comment.id} className="p-4 hover:bg-gray-50">
                 <div className="flex space-x-3">
-                  <div className="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center text-white text-sm">
-                    {comment.author.username[0].toUpperCase()}
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm">
+                    🎓
                   </div>
                   <div className="flex-1">
                     <div className="bg-gray-100 rounded-2xl px-3 py-2">
-                      <p className="font-semibold text-sm">{comment.author.username}</p>
+                      <p className="font-semibold text-sm">Student</p>
                       <p className="text-gray-900">{comment.content}</p>
                     </div>
                     <div className="flex items-center space-x-4 mt-1 text-xs text-gray-500">

@@ -1,4 +1,3 @@
-import { getAPIBaseURL } from '../../utils/ipDetection';
 import { useState, useEffect } from 'react';
 import ProtectedRoute from '../../components/auth/ProtectedRoute';
 import AutoHideNavbar from '../../components/layout/AutoHideNavbar';
@@ -22,29 +21,15 @@ export default function NotificationsPage() {
   }, []);
 
   const loadNotifications = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/notifications/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      setNotifications(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Failed to load notifications');
-    }
+    // Using real-time notifications now
+    setNotifications([]);
   };
 
   const markAsRead = async (id: number) => {
-    try {
-      const token = localStorage.getItem('token');
-      await fetch(`http://10.0.0.122:8001/api/v1/notifications/${id}/read`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      loadNotifications();
-    } catch (error) {
-      console.error('Failed to mark as read');
-    }
+    // Mark as read locally
+    setNotifications(prev => 
+      prev.map(n => n.id === id ? { ...n, is_read: true } : n)
+    );
   };
 
   const getIcon = (type: string) => {

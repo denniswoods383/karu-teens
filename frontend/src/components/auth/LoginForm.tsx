@@ -1,33 +1,27 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { api } from '../../utils/api';
-import { useAuthStore } from '../../store/authStore';
-import { LoginData, AuthResponse } from '../../types/auth';
-import { getAPIBaseURL } from '../../utils/ipDetection';
+import { supabase } from '../../lib/supabase';
+import { LoginData } from '../../types/auth';
 
 export default function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { register, handleSubmit, formState: { errors } } = useForm<LoginData>();
-  const login = useAuthStore((state) => state.login);
 
   const onSubmit = async (data: LoginData) => {
     setLoading(true);
     setError('');
     
     try {
-      const response = await fetch(`${getAPIBaseURL()}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password
       });
-      const result = await response.json();
       
-      if (response.ok) {
-        login(result.access_token, result.user);
-        window.location.href = '/feed';
+      if (authError) {
+        setError(authError.message);
       } else {
-        setError(result.detail || 'Login failed');
+        window.location.href = '/feed';
       }
     } catch (err: any) {
       setError('Network error');

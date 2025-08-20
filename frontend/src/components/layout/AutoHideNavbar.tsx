@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useAuthStore } from '../../store/authStore';
-import AdvancedSearch from '../search/AdvancedSearch';
-import EditProfileModal from '../profile/EditProfileModal';
-import ProfilePhoto from '../user/ProfilePhoto';
+import { useAuth } from '../../hooks/useSupabase';
+import { supabase } from '../../lib/supabase';
 
 export default function AutoHideNavbar() {
-  const { user, logout } = useAuthStore();
+  const { user } = useAuth();
+  
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/auth/login';
+  };
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
@@ -79,6 +82,13 @@ export default function AutoHideNavbar() {
                 <span className="text-xs font-medium">Notifications</span>
               </button>
               <button 
+                onClick={() => window.location.href = '/mwaks'}
+                className="flex flex-col items-center py-2 text-gray-600 hover:bg-gray-100 px-4 rounded-lg hover:text-blue-600"
+              >
+                <span className="text-xl">📚</span>
+                <span className="text-xs font-medium">MWAKS</span>
+              </button>
+              <button 
                 onClick={() => window.location.href = '/ai'}
                 className="flex flex-col items-center py-2 text-gray-600 hover:bg-gray-100 px-4 rounded-lg hover:text-blue-600"
               >
@@ -107,13 +117,10 @@ export default function AutoHideNavbar() {
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
                   className="flex items-center space-x-2 hover:bg-gray-100 rounded-lg p-2"
                 >
-                  <ProfilePhoto 
-                    userId={user?.id || 0}
-                    username={user?.username || ''}
-                    size="sm"
-                    showBadges={false}
-                  />
-                  <span className="hidden md:block text-gray-700 font-medium">{user?.username}</span>
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">
+                    🎓
+                  </div>
+                  <span className="hidden md:block text-gray-700 font-medium">{user?.email?.split('@')[0]}</span>
                   <span className="hidden md:block text-gray-400">▼</span>
                 </button>
                 
@@ -121,15 +128,12 @@ export default function AutoHideNavbar() {
                   <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                     <div className="p-4 border-b">
                       <div className="flex items-center space-x-3">
-                        <ProfilePhoto 
-                          userId={user?.id || 0}
-                          username={user?.username || ''}
-                          size="md"
-                          showBadges={false}
-                        />
+                        <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">
+                          🎓
+                        </div>
                         <div>
-                          <p className="font-semibold">{user?.full_name || user?.username}</p>
-                          <p className="text-sm text-gray-600">@{user?.username}</p>
+                          <p className="font-semibold">Student</p>
+                          <p className="text-sm text-gray-600">{user?.email}</p>
                         </div>
                       </div>
                     </div>
@@ -137,20 +141,30 @@ export default function AutoHideNavbar() {
                     <div className="py-2">
                       <button
                         onClick={() => {
-                          setShowEditProfile(true);
+                          window.location.href = '/mwaks';
                           setShowProfileMenu(false);
                         }}
                         className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-3"
                       >
-                        <span>⚙️</span>
-                        <span>Edit Profile</span>
+                        <span>📚</span>
+                        <span>MWAKS</span>
                       </button>
                       <button
-                        onClick={() => window.location.href = `/profile/${user?.id}`}
+                        onClick={() => setShowProfileMenu(false)}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-3"
+                      >
+                        <span>⚙️</span>
+                        <span>Settings</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.location.href = '/profile';
+                          setShowProfileMenu(false);
+                        }}
                         className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-3"
                       >
                         <span>👤</span>
-                        <span>View Profile</span>
+                        <span>My Profile</span>
                       </button>
                       <button className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-3">
                         <span>🔒</span>
@@ -159,7 +173,7 @@ export default function AutoHideNavbar() {
                       <hr className="my-2" />
                       <button
                         onClick={() => {
-                          logout();
+                          handleLogout();
                           setShowProfileMenu(false);
                         }}
                         className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-3 text-red-600"
@@ -176,11 +190,7 @@ export default function AutoHideNavbar() {
         </div>
       </nav>
 
-      <EditProfileModal
-        isOpen={showEditProfile}
-        onClose={() => setShowEditProfile(false)}
-        onSave={() => console.log('Profile saved')}
-      />
+
     </>
   );
 }
